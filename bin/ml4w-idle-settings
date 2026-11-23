@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# Launcher for the idle timers panel. Mirrors ml4w-powermenu's CLI so it feels
+# the same from keybindings and the terminal.
+set -euo pipefail
+
+DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+SHELL_PID_PATTERN="qs -p $DIR"
+
+usage() {
+    cat <<USAGE
+Usage: ml4w-idle-settings [command]
+
+Commands:
+  start             Start the panel (default, does nothing if already running)
+  stop              Stop the panel
+  toggle            Show or hide the panel
+  open              Show the panel
+  close             Hide the panel
+  help              Show this help
+USAGE
+}
+
+call() {
+    timeout 3 qs -p "$DIR" ipc call idle "$1" 2>/dev/null
+}
+
+command="${1:-start}"
+case "$command" in
+    start)
+        if ! pgrep -f -- "$SHELL_PID_PATTERN" >/dev/null 2>&1; then
+            exec qs -p "$DIR"
+        fi
+        ;;
+    stop)
+        pkill -f -- "$SHELL_PID_PATTERN" 2>/dev/null || true
+        ;;
+    toggle|open)
+        if ! call "$command"; then
+            setsid qs -p "$DIR" >/dev/null 2>&1 < /dev/null &
+            # Give the IPC socket a moment, then repeat the request.
+            sleep 1
+            call "$command" || true
+        fi
+        ;;
+    close)
+        call close || true
+        ;;
+    help|--help|-h)
+        usage
+        ;;
+    *)
+        usage >&2
+        exit 2
+        ;;
+esac
